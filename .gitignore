@@ -1,0 +1,46 @@
+# Node / tooling
+node_modules/
+pnpm-lock.yaml? # keep your ONE lockfile, delete this line if you use pnpm
+package-lock.json? # keep your ONE lockfile, delete this line if you use npm
+yarn.lock? # keep your ONE lockfile, delete this line if you use yarn
+
+# Vite / SvelteKit builds & caches
+.svelte-kit/
+.vite/
+build/
+dist/
+coverage/
+
+# Local env + hosting
+.env
+.env.*
+!.env.example
+.vercel/
+.netlify/
+.firebase/
+.tmp/
+.cache/
+
+# OS / editor / logs
+.DS_Store
+Thumbs.db
+*.log
+*.pid
+*.seed
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Images/fonts considered binary to avoid bad diffs (optional)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.pdf
+*.woff
+*.woff2
+

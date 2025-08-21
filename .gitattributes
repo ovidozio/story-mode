@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+# Don’t diff images/fonts
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.mp4 binary
+*.mov binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
