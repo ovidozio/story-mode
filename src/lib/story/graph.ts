@@ -3,120 +3,105 @@ export type Beat = { id: string; text: string; choices?: Choice[] };
 export type Scene = { id: string; title?: string; start: string; beats: Record<string, Beat> };
 export type Story = Record<string, Scene>;
 
+/*
+  Single scene, depth = 3 (root → 0/1 → 00/01/10/11 terminals)
+  - 7 beats total
+  - fully-qualified links (scene1.X) for consistency
+*/
+
 export const story: Story = {
   scene1: {
     id: "scene1",
     title: "Night Train",
-    start: "intro",
+    start: "root",
     beats: {
-      intro: {
-        id: "intro",
+      // level 1
+      root: {
+        id: "root",
         text:
-          `The night train slid along the coast, and salt speckled the windows like a quiet constellation. Carriage lights breathed with the rails—inhale on the bend, exhale on the straight—and the pages in your lap rose and fell as if trying to keep time. Across the aisle, a courier hugged a tin case to their ribs with the wary devotion reserved for heirlooms or fragile lies. The case hummed—faint, persistent, as if a tuning fork had been struck somewhere just out of sight. You told yourself to read, but the words kept surfacing like foam, refusing to sink.`,
+`The night train slid along the coast, and salt pinpricked constellations on the window that shifted with each curve.
+Carriage lights breathed with the rails—inhale on the bend, exhale on the straight—so softly that the page in your lap seemed to breathe too.
+Across the aisle, a courier sat very still with a matte tin case balanced on their knees, holding it as if a bird might wake inside.
+The case gave off a faint, steady hum that you felt in your molars more than heard, the way a power line sings when the air is wet.
+You caught the courier watching your reflection in the glass rather than your eyes, as if the sea could answer for you.
+Choice arrives as a pressure before it becomes a thought.`,
         choices: [
-          { label: "Watch the courier more closely", to: "watch" },
-          { label: "Turn to the window and read the sea", to: "sea" }
+          { label: "Watch the courier", to: "scene1.0" },
+          { label: "Watch the sea",     to: "scene1.1" }
         ]
       },
-      watch: {
-        id: "watch",
-        text:
-          `The courier’s coat was neat, every button partnered, every pocket closed. The case itself was rubbed matte by years of handling, yet the hum inside it felt young—impatient, bright at the edges. You imagined its interior: coiled wire, a folded note, a small clock that believed time wasn’t a circle but a knot. The courier noticed you noticing and lowered their gaze, as though hiding the eyes could hide the rest. The hum kept a rhythm your pulse tried—unsuccessfully—to imitate.`,
-        choices: [
-          { label: "Ask an innocent question", to: "talk" },
-          { label: "Pretend to sleep and keep listening", to: "sleep" }
-        ]
-      },
-      sea: {
-        id: "sea",
-        text:
-          `Outside, the coast unspooled in charcoal strokes. The water lifted and set itself down again, counting something the world had forgotten. Salt filmed the glass; when you breathed, the fog drew a temporary halo that slid away with the next sway of the car. Shore lights arrived like punctuation—comma, comma, dash—until a long pause held. Your reflection drifted over the black water like a late cloud. Behind it, the courier’s case held its private note.`,
-        choices: [
-          { label: "Crack the window to taste the air", to: "window" },
-          { label: "Face forward and steady your thoughts", to: "book" }
-        ]
-      },
-      talk: {
-        id: "talk",
-        text:
-          `"Late run," you said, as if lateness were a secret only travelers kept. The courier’s mouth shaped the start of a smile and then set it aside, like a cup placed carefully beyond reach. "Late, but safe," they said. Their fingers tapped a patient rhythm on the case; the hum adjusted, finding a second voice, a harmony. Somewhere under your feet the rails leaned into a curve you didn’t remember from the map.`,
-        choices: [
-          { label: "Step off at the next stop", to: "scene2.platform" },
-          { label: "Stay aboard and shadow the courier", to: "scene2.cab" }
-        ]
-      },
-      sleep: {
-        id: "sleep",
-        text:
-          `You let your eyelids fall until the carriage softened into warmth and motion. In the dimness, the hum grew clearer, a thread held taut by a careful hand. You pictured a staff of music stamped into tin, notes punched like stars across a winter sky. Each vibration rang a tiny bone near your ear. It was not a lullaby. It was a spelling, and you wanted the word.`,
-        choices: [
-          { label: "Wake as the brakes begin to sing", to: "scene2.platform" },
-          { label: "Keep drifting and trust your ears", to: "scene2.cab" }
-        ]
-      },
-      window: {
-        id: "window",
-        text:
-          `You thumbed the latch. Night slid in—a thin seam of rain, salt, and metal. The train wore the weather like a second skin; the air tasted faintly of batteries. Up the track, two rails met and argued, their disagreement arriving as a tremor in your wrists. The case across the aisle agreed, its hum rounding into a chord that felt like a direction.`,
-        choices: [
-          { label: "Follow the current off the train", to: "scene2.platform" },
-          { label: "Sit back and learn the chord", to: "scene2.cab" }
-        ]
-      },
-      book: {
-        id: "book",
-        text:
-          `You tried the page again. The paragraph had the tide’s habit—arriving whole, receding in fragments. A phrase clung: <span class="dotted">“Every signal is a promise.”</span> It wasn’t from your book, not exactly. The words rang against the case’s hum and came back altered, warm as a coin returned from a closed fist. Promises were still promises, even when they traveled in disguise.`,
-        choices: [
-          { label: "Mist drifting over the platform", to: "scene2.platform" },
-          { label: "Lamplight and corridor whispers", to: "scene2.cab" }
-        ]
-      }
-    }
-  },
 
-  scene2: {
-    id: "scene2",
-    title: "Between Stations",
-    start: "platform",
-    beats: {
-      platform: {
-        id: "platform",
+      // level 2
+      "0": {
+        id: "0",
         text:
-          `The platform breathed rain and diesel. Overhead, a loudspeaker cleared its throat and decided against speaking. Passengers unscrolled from the doors like careful paper figures, each with a crease you could read if you stood still enough. The courier kept the case close. The hum softened—not gone, but polite—as though you had stepped into a room where people whispered by custom.`,
+`The courier’s coat was neat to the last button; even the loose threads looked intentional, like stitches in a map.
+You tried to guess the case’s weight from the tendons in their hand and found it lighter than the sound suggested, a box that believed in itself.
+The hum brightened at corners and softened on straights, as if the rails were teaching it to speak in intervals.
+You pictured coils and paper, perhaps a clock that believed time was a knot and could be untied by patience.
+When your gaze lingered too long, the courier smiled without showing teeth and tapped the lid twice; the hum answered with a small, obedient chord.
+Curiosity is a key that pretends to be a question.`,
         choices: [
-          { label: "Follow the signs painted in old arrows", to: "signs" },
-          { label: "Wait near the case and listen", to: "wait" }
+          { label: "Ask a harmless question",        to: "scene1.00" },
+          { label: "Feign sleep and keep listening", to: "scene1.01" }
         ]
       },
-      cab: {
-        id: "cab",
+
+      "1": {
+        id: "1",
         text:
-          `The corridor was warm and metallic, a tunnel of brushed light. Doors breathed at the edges. The case’s tone resolved into intervals that made a geometry in your chest, a shape you could almost name. The courier paused by a window where the night pressed its ear to the glass. Reflections layered: you, the courier, the case—and something else that watched like a patient ledger.`,
+`Outside, the coastline unspooled in charcoal strokes and lonely lamps, each light a footnote to a town you would not enter.
+Your reflection drifted over the black water like a late cloud; behind it the tin case kept its private metronome.
+You wrote a sentence in the fog on the glass and watched the carriage erase it syllable by syllable.
+The window carried smells in seams—rain, metal, something like pennies warmed in a palm—and the rails spoke in an older grammar beneath it all.
+Somewhere ahead a signal would change from waiting to permission; you felt your pulse try to keep time.
+The sea offered no opinion, which was almost as persuasive as certainty.`,
         choices: [
-          { label: "Try the brass latch one door down", to: "door" },
-          { label: "Stand still and let the tone resolve", to: "listen" }
+          { label: "Crack the window a finger’s width",         to: "scene1.10" },
+          { label: "Face forward and steady your thoughts",     to: "scene1.11" }
         ]
       },
-      signs: {
-        id: "signs",
+
+      // level 3 (terminals)
+      "00": {
+        id: "00",
         text:
-          `Arrows pointed left, then right, then left again, a chorus without a conductor. You chose one because choosing is how the world keeps moving. Halfway down the hall the arrow pointed back at you, and you understood that some signs measure attention, not distance. You were paying.`,
+`“Late run,” you ventured, as if lateness were a password people shared only on the rails.
+“Late, but safe,” the courier said, the corner of their mouth folding like a saved page.
+They tapped the case again—one, two—and the hum found harmony, a second voice arriving shyly from beneath the first.
+Somewhere the map you carried in your head bent without asking, as if a river had changed its mind in the night.
+You realized the conversation was less about destination than about whether you were already part of the cargo.
+Agreement can sound like politeness when it first puts on its shoes.`
       },
-      wait:  {
-        id: "wait",
+
+      "01": {
+        id: "01",
         text:
-          `You waited until the waiting had edges. The case’s hum settled in the space behind your teeth, a coin held there for luck. The train shifted, metal speaking to metal in a language old enough to ignore your questions.`,
+`You let your eyelids drop until the carriage softened into warmth and motion and the world narrowed to a ribbon.
+Beneath the tone there was a pattern; beneath the pattern, a spelling you could almost pronounce; beneath the spelling, a kindness you didn’t quite trust.
+You followed the sequence until breath and steel made the same argument and time pooled in the hollow of your ear.
+A memory surfaced—a waiting room, a numbered ticket, someone you promised to meet “when the signal clears.”
+You kept listening anyway, knowing that pretending to sleep is a way of asking the world to speak first.`
       },
-      door:  {
-        id: "door",
+
+      "10": {
+        id: "10",
         text:
-          `The latch lifted with a courteous resistance, the sort of boundary that wants to be acknowledged. Inside, the air was cooler. The chord bent lower, like a bow. You stepped in. The corridor forgot you.`,
+`The latch yielded a measured click.
+Night slid in—rain, salt, metal—and the air tasted faintly of batteries, the sort of weather that remembers your name.
+Up the line the rails met and argued; their debate traveled through the glass into your wrists and settled there like advice.
+The chord inside the case turned from a note into a direction, pointing not outward but slightly inward, like a compass trained on an idea.
+For an instant the carriage’s reflections doubled and you saw yourself stepping through two doors at once, both of them yours to close.`
       },
-      listen:{
-        id: "listen",
+
+      "11": {
+        id: "11",
         text:
-          `You let the tone speak until it stopped needing to be a tone. Beneath it was a pattern; beneath the pattern, a kindness you didn’t trust yet. You did not move. The train moved you.`,
+`You tried the page again. It had the tide’s habit—arriving whole, receding in fragments—until a phrase clung and would not leave:
+<span class="dotted">“Every signal is a promise.”</span> The words didn’t belong to your book, not exactly, but the case’s hum adopted them and made them warmer.
+You read them aloud in a whisper and felt the rails answer with a long, patient vowel.
+Promises, you decided, are simply agreements about which direction to face when the door opens.
+You faced forward and let the sentence keep you company until the lamps outside began to keep time with it.`
       }
     }
   }
@@ -125,7 +110,7 @@ export const story: Story = {
 export function resolveTarget(currentSceneId: string, to: string) {
   if (to.includes(".")) {
     const [sceneId, beatId] = to.split(".");
-    return { sceneId, beatId, sceneChange: true };
+    return { sceneId, beatId, sceneChange: sceneId !== currentSceneId };
   }
   return { sceneId: currentSceneId, beatId: to, sceneChange: false };
 }
