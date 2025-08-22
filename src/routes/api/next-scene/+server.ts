@@ -1,77 +1,113 @@
-import type { RequestHandler } from "@sveltejs/kit";
-import { env as priv } from "$env/dynamic/private";
-import { getOpenAI, getModel } from "$lib/ai/client";
-import { buildSystemPrompt, buildUserPrompt } from "$lib/ai/prompt";
-import type { NextSceneRequest, NextSceneResponse, Scene } from "$lib/ai/schema";
-import { validateScene, normalizeScene } from "$lib/ai/schema";
+import type { RequestHandler } from './$types';
+import { canGenerate, clientKeyFrom, consume } from '$lib/server/quota';
+import { buildSystemPrompt, buildUserPrompt } from '$lib/ai/prompt';
+import type { Scene } from '$lib/ai/schema';
 
-export const POST: RequestHandler = async ({ request }) => {
-  if (priv.DEMO_DISABLED === "1") {
-    const disabled: NextSceneResponse = { kind: "error", message: "Generation is disabled (DEMO_DISABLED=1)." };
-    return new Response(JSON.stringify(disabled), { status: 503 });
-  }
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+const MAX_CHARS = 3000;
+const REQUEST_TIMEOUT_MS = 30000;
 
-  let body: NextSceneRequest;
-  try { body = await request.json(); }
-  catch { return jsonErr(400, "Invalid JSON body."); }
-
-  const history   = Array.isArray(body.history) ? body.history : [];
-  const user_hint = (body.user_hint ?? "").slice(0, 280);
-  const max_chars = Math.max(600, Math.min(body.max_chars ?? 1400, 2200));
-  const newSceneId = (body.newSceneId || "sceneX").trim() || "sceneX";
-
-  // Basic env guard
-  if (!priv.OPENAI_API_KEY) return jsonErr(500, "Missing OPENAI_API_KEY on server.");
-
-  const system = buildSystemPrompt();
-  const user   = buildUserPrompt({ history, user_hint, max_chars, newSceneId });
+async function callOpenAI(system: string, user: string) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const openai = getOpenAI();
-    const model  = getModel("gpt-4o-mini");
-
-    const resp = await openai.chat.completions.create({
-      model,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      max_tokens: 1100
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${OPENAI_API_KEY}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: 'json_object' }, // force single JSON object
+        temperature: 0.8,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ]
+      }),
+      signal: ctrl.signal
     });
 
-    const raw = resp.choices[0]?.message?.content?.trim() || "";
-    let parsed: any;
-    try { parsed = JSON.parse(raw); }
-    catch {
-      // Log server-side only (safe), but don’t echo raw back to client
-      console.error("LLM non-JSON:", raw);
-      return jsonErr(502, "Model did not return valid JSON.");
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`OpenAI error ${res.status}: ${err}`);
     }
 
-    const scene: any = (parsed as any).scene ?? parsed;
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string') throw new Error('No content from model');
 
-    // Normalize small issues, then validate with detailed errors
-    const normalized = normalizeScene(scene);
-    const check = validateScene(normalized);
-    if (check.ok) {
-      (normalized as Scene).start = "root";
-      const ok: NextSceneResponse = { kind: "scene", scene: normalized };
-      return new Response(JSON.stringify(ok), { headers: { "content-type": "application/json" } });
-    } else {
-      // Helpful details back to client
-      const err: NextSceneResponse = { kind: "error", message: "Response failed schema validation.", details: check.errors.slice(0, 12) };
-      return new Response(JSON.stringify(err), { status: 422, headers: { "content-type": "application/json" } });
+    let obj: unknown;
+    try {
+      obj = JSON.parse(text);
+    } catch {
+      throw new Error('Model did not return valid JSON');
     }
-  } catch (e: any) {
-    console.error(e);
-    return jsonErr(500, e?.message ?? "Generation failed.");
+    return obj as Scene;
+  } finally {
+    clearTimeout(t);
   }
-};
-
-function jsonErr(status: number, message: string): Response {
-  const payload: NextSceneResponse = { kind: "error", message };
-  return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
 }
+
+export const POST: RequestHandler = async (event) => {
+  if (!OPENAI_API_KEY) {
+    return new Response(JSON.stringify({ error: 'server_misconfig', message: 'Missing OPENAI_API_KEY' }), {
+      status: 500, headers: { 'content-type': 'application/json' }
+    });
+  }
+
+  // Per-IP quota
+  const clientKey = clientKeyFrom(event.request.headers, event.getClientAddress);
+  const { allowed, remaining, limit } = await canGenerate(clientKey);
+  if (!allowed) {
+    return new Response(JSON.stringify({
+      error: 'limit_exceeded',
+      message: `You’ve reached the limit of ${limit} story evolutions for this IP.`,
+      remaining: 0
+    }), { status: 429, headers: { 'content-type': 'application/json' } });
+  }
+
+  // Read client payload
+  let payload: {
+    history?: Array<{ sceneId: string; beatId: string; choiceLabel?: string; excerpt?: string }>;
+    user_hint?: string;
+    newSceneId?: string;
+  } = {};
+  try { payload = await event.request.json(); } catch {}
+
+  const history = payload.history ?? [];
+  const user_hint = payload.user_hint ?? '';
+  const newSceneId = payload.newSceneId || `scene${Date.now()}`;
+
+  // Build prompts
+  const system = buildSystemPrompt();
+  const user = buildUserPrompt({
+    history,
+    user_hint,
+    max_chars: MAX_CHARS,
+    newSceneId
+  });
+
+  // Call OpenAI
+  let scene: Scene;
+  try {
+    scene = await callOpenAI(system, user);
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: 'generation_failed', message: String(e?.message || e) }), {
+      status: 502, headers: { 'content-type': 'application/json' }
+    });
+  }
+
+  // Consume one credit
+  const used = await consume('generate', clientKey);
+  const newRemaining = Math.max(0, limit - used);
+
+  return new Response(JSON.stringify({ scene, remaining: newRemaining }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' }
+  });
+};
 

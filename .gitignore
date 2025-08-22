@@ -1,8 +1,9 @@
+# Package managers — keep ONLY npm lockfile tracked
+pnpm-lock.yaml
+yarn.lock
+
 # Node / tooling
 node_modules/
-pnpm-lock.yaml? # keep your ONE lockfile, delete this line if you use pnpm
-package-lock.json? # keep your ONE lockfile, delete this line if you use npm
-yarn.lock? # keep your ONE lockfile, delete this line if you use yarn
 
 # Vite / SvelteKit builds & caches
 .svelte-kit/
@@ -32,7 +33,7 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 
-# Images/fonts considered binary to avoid bad diffs (optional)
+# Binary assets (optional)
 *.png
 *.jpg
 *.jpeg

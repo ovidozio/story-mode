@@ -1,137 +1,151 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from "svelte";
-  import { fetchNextScene } from "$lib/ai/fetch";
-  import type { PathStep, Scene } from "$lib/ai/schema";
+  import { createEventDispatcher, onDestroy } from 'svelte';
+  import type { Scene } from '$lib/ai/schema';
 
-  export let history: PathStep[] = [];
-  export let disabled = false;
-  export let maxChars = 1400;
-  export let newSceneId = "sceneX";
-  export let resetSeq = 0; // optional: for cancellation from parent
-  export let epoch = 0;
-
-  const HINT_LIMIT = 280;
-  const MAX_AUTO_PX = 280;   // auto-grow up to this height
-
-  let hint = "";
-  let busy = false;
-  let error = "";
-
-  let ta: HTMLTextAreaElement | null = null;
-  let controller: AbortController | null = null;
-  let lastResetSeq = resetSeq;
+  // Props from page
+  export let history: { sceneId: string; beatId: string; choiceLabel?: string; excerpt?: string }[] = [];
+  export let resetSeq: number = 0;   // when parent increments, abort in-flight
+  export let epoch: number = 0;      // echo back so parent can ignore stale
 
   const dispatch = createEventDispatcher<{ generated: { scene: Scene; epoch: number } }>();
 
-  function autosize() {
-    if (!ta) return;
-    ta.style.height = "auto";
-    const h = Math.min(ta.scrollHeight, MAX_AUTO_PX);
-    ta.style.height = `${h}px`;
-    // show scrollbar only if exceeding max height
-    ta.style.overflowY = ta.scrollHeight > MAX_AUTO_PX ? "auto" : "hidden";
-  }
+  let hint = '';
+  let loading = false;
+  let error = '';
+  let remaining: number | null = null;
 
-  $: if (resetSeq !== lastResetSeq) {
-    lastResetSeq = resetSeq;
-    if (controller) controller.abort();
-    controller = null;
-    busy = false;
-    error = "";
-    hint = "";
-    // reset size
-    queueMicrotask(autosize);
-  }
+  let controller: AbortController | null = null;
+  let lastResetSeq = resetSeq;
 
-  onMount(() => autosize());
-
-  async function onContinue() {
-    if (busy || disabled) return;
-    error = "";
-    busy = true;
-
+  async function generate() {
+    error = '';
+    loading = true;
+    controller?.abort();
     controller = new AbortController();
-    const myEpoch = epoch;
+
     try {
-      const scene = await fetchNextScene({
-        history,
-        user_hint: hint.slice(0, HINT_LIMIT),
-        max_chars: maxChars,
-        newSceneId
-      }, controller.signal);
-      dispatch("generated", { scene, epoch: myEpoch });
-      hint = "";
-      autosize();
-    } catch (e: any) {
-      if (e?.name !== "AbortError") {
-        error = e?.message || "Failed to generate scene";
+      const res = await fetch('/api/next-scene', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          history,
+          user_hint: hint,
+          newSceneId: `scene${Date.now()}`
+        })
+      });
+
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        remaining = 0;
+        error = data?.message || 'Limit reached for this IP.';
+        return;
       }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        error = data?.message || `Request failed (${res.status})`;
+        return;
+      }
+
+      const data = await res.json();
+      remaining = typeof data?.remaining === 'number' ? data.remaining : remaining;
+      if (data?.scene) {
+        dispatch('generated', { scene: data.scene as Scene, epoch });
+        hint = '';
+      } else {
+        error = 'Server returned no scene.';
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return;
+      error = e?.message || 'Network error';
     } finally {
-      busy = false;
-      controller = null;
+      loading = false;
     }
   }
+
+  // Abort if parent resets
+  $: if (resetSeq !== lastResetSeq) {
+    lastResetSeq = resetSeq;
+    controller?.abort();
+    loading = false;
+  }
+
+  onDestroy(() => controller?.abort());
 </script>
 
 <div class="continue">
   <textarea
-    bind:this={ta}
-    placeholder="(optional) tell the story where to go…"
+    class="hint"
+    placeholder="(optional) how should the story evolve?"
     bind:value={hint}
-    maxlength={HINT_LIMIT}
     rows="2"
-    {disabled}
-    on:input={autosize}
-  ></textarea>
+  />
+  <button class="go" on:click={generate} disabled={loading}>
+    {#if loading}…generating…{:else}continue{/if}
+  </button>
 
-  <div class="row">
-    <div class="meta">
-      <span class="count">{hint.length}/{HINT_LIMIT}</span>
-      {#if error}<span class="err">{error}</span>{/if}
-    </div>
-    <button class="go" on:click={onContinue} disabled={disabled || busy}>
-      {busy ? "Generating…" : "Continue"}
-    </button>
-  </div>
+  {#if typeof remaining === 'number'}
+    <div class="quota">remaining: {remaining}</div>
+  {/if}
+
+  {#if error}
+    <div class="err">{error}</div>
+  {/if}
 </div>
 
 <style>
-  .continue { display: grid; gap: 10px; margin-top: 14px; }
-
-  textarea {
-    width: 100%;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 14px;      /* more rounded */
-    padding: 12px 14px;
-    font: inherit;
-
-    resize: none;             /* remove manual drag handle */
-    overflow: hidden;         /* hide scrollbar until we exceed MAX_AUTO_PX */
-    line-height: 1.6;
-    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
-  }
-  textarea:focus {
-    outline: none;
-    border-color: color-mix(in oklab, var(--accent), white 15%);
-    box-shadow: 0 0 0 3px rgba(110,168,254,0.18);
+  .continue {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: start;
+    margin-top: 14px;
   }
 
-  .row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
-  .meta { display: flex; gap: 12px; align-items: center; color: var(--text-dim); font-size: .9em; }
-  .err { color: #ff8a8a; }
-  .go {
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 9px 16px;
+  .hint {
+    grid-column: 1 / 2;
+    resize: none;
     border-radius: 12px;
-    cursor: pointer;
-    transition: background .2s ease, border-color .2s ease, transform .05s ease;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 10px 12px;
+    line-height: 1.5;
+    min-height: 44px;
   }
-  .go:hover { background: var(--hover); }
-  .go:active { transform: translateY(1px); }
+
+  .go {
+    grid-column: 2 / 3;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 0 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
   .go:disabled { opacity: .6; cursor: default; }
+
+  .quota {
+    grid-column: 1 / -1;
+    font-size: .9em;
+    color: var(--text-dim);
+  }
+
+  .err {
+    grid-column: 1 / -1;
+    color: #ff9d9d;
+  }
+
+  @media (max-width: 720px) {
+    .continue {
+      grid-template-columns: 1fr;
+    }
+    .go {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
 </style>
 

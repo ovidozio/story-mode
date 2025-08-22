@@ -1,14 +1,31 @@
-import OpenAI from "openai";
-import { env as priv } from "$env/dynamic/private";
+import type { Scene } from './schema';
 
-// Uses OPENAI_API_KEY (server-only secret) and optional OPENAI_MODEL
-export function getOpenAI() {
-  const key = priv.OPENAI_API_KEY; // <-- IMPORTANT
-  if (!key) throw new Error("Missing OPENAI_API_KEY in environment");
-  return new OpenAI({ apiKey: key });
-}
+export type PathStep = {
+  sceneId: string;
+  beatId: string;
+  choiceLabel?: string;
+  excerpt?: string;
+};
 
-export function getModel(defaultModel = "gpt-4o-mini") {
-  return (priv.OPENAI_MODEL?.trim() || defaultModel);
+export async function requestNextScene(args: {
+  history: PathStep[];
+  user_hint?: string;
+  newSceneId?: string;
+}): Promise<{ scene: Scene; remaining: number }> {
+  const res = await fetch('/api/next-scene', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      history: args.history ?? [],
+      user_hint: args.user_hint ?? '',
+      newSceneId: args.newSceneId || `scene${Date.now()}`
+    })
+  });
+
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`next-scene failed (${res.status}): ${msg}`);
+  }
+  return res.json();
 }
 
